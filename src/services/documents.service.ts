@@ -1,10 +1,36 @@
 import api from './api';
 
+const deriveSystemStatus = (document: any) => {
+  const processingStatus = String(document?.processingStatus || '');
+  const extractionStatus = String(document?.extractionStatus || '');
+  const extractedText = String(document?.extractedText || '').trim();
+
+  if (
+    processingStatus === 'uploaded' ||
+    processingStatus === 'processing' ||
+    extractionStatus === 'pending' ||
+    extractionStatus === 'processing'
+  ) {
+    return 'pending';
+  }
+
+  if (document?.sourceType === 'file' && extractionStatus === 'failed' && !extractedText) {
+    return 'uploaded_not_extracted';
+  }
+
+  if (processingStatus === 'failed') {
+    return 'failed';
+  }
+
+  return 'processed';
+};
+
 const normalize = (document: any) => ({
   ...document,
   id: document._id || document.id,
   hasFile: !!document.hasFile || !!document.storagePath,
   lastUpdated: document.lastUpdated || document.updatedAt || null,
+  systemStatus: document.systemStatus || deriveSystemStatus(document),
 });
 
 const buildFormData = (data: any, file: File) => {
@@ -33,7 +59,10 @@ export const documentsService = {
 
   getExtractedText: async (id: string) => {
     const response = await api.get(`/documents/${id}/extracted-text`);
-    return response.data;
+    return {
+      ...response.data,
+      systemStatus: response.data?.systemStatus || deriveSystemStatus(response.data),
+    };
   },
 
   create: async (data: any) => {

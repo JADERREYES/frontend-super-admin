@@ -115,6 +115,74 @@ const ErrorBox = ({
   </div>
 );
 
+const getDocumentStatusMeta = (systemStatus?: string) => {
+  switch (systemStatus) {
+    case 'processed':
+      return {
+        label: 'Listo para usar',
+        tone: 'success' as const,
+        helper: 'El archivo fue subido y el contenido ya quedo procesado para consulta.',
+      };
+    case 'pending':
+      return {
+        label: 'Procesando',
+        tone: 'info' as const,
+        helper: 'El archivo fue recibido y el sistema aun esta preparando su contenido.',
+      };
+    case 'uploaded_not_extracted':
+      return {
+        label: 'Subido sin texto extraido',
+        tone: 'warning' as const,
+        helper:
+          'El archivo se guardo correctamente, pero no se pudo extraer texto automaticamente.',
+      };
+    case 'failed':
+      return {
+        label: 'Con incidencia',
+        tone: 'danger' as const,
+        helper: 'El documento necesita revision administrativa para completar su procesamiento.',
+      };
+    default:
+      return {
+        label: 'Sin clasificar',
+        tone: 'neutral' as const,
+        helper: 'El documento no reporto un estado claro todavia.',
+      };
+  }
+};
+
+const getExtractionStatusLabel = (status?: string) => {
+  switch (status) {
+    case 'completed':
+      return 'Texto extraido';
+    case 'processing':
+      return 'Extrayendo texto';
+    case 'pending':
+      return 'Pendiente de extraccion';
+    case 'failed':
+      return 'Extraccion no disponible';
+    case 'not_required':
+      return 'Sin extraccion necesaria';
+    default:
+      return 'Estado desconocido';
+  }
+};
+
+const getIndexingStatusLabel = (status?: string) => {
+  switch (status) {
+    case 'completed':
+      return 'Indexado';
+    case 'processing':
+      return 'Indexando';
+    case 'failed':
+      return 'Indexacion con incidencia';
+    case 'not_indexed':
+      return 'Sin indexar';
+    default:
+      return status || 'Sin indexar';
+  }
+};
+
 const Modal = ({
   open,
   title,
@@ -898,6 +966,9 @@ const DocumentsPage = () => {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [formError, setFormError] = useState('');
+  const [statusFilter, setStatusFilter] = useState<
+    'all' | 'processed' | 'pending' | 'uploaded_not_extracted'
+  >('all');
 
   const load = async () => {
     try {
@@ -986,7 +1057,6 @@ const DocumentsPage = () => {
 
   if (loading) return <Loading label="Cargando documentos..." />;
   if (error) return <ErrorBox message={error} onRetry={load} />;
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -1006,8 +1076,9 @@ const DocumentsPage = () => {
                   <Badge tone="info">{item.category}</Badge>
                   <Badge tone={item.status === 'published' ? 'success' : item.status === 'draft' ? 'warning' : 'neutral'}>{item.status}</Badge>
                   {item.hasFile ? <Badge tone="info">archivo</Badge> : <Badge tone="neutral">manual</Badge>}
+                  <Badge tone={statusMeta.tone}>{statusMeta.label}</Badge>
                   <Badge tone={item.retrievalMode === 'semantic' ? 'success' : item.retrievalMode === 'keyword' ? 'warning' : 'neutral'}>{item.retrievalMode || 'none'}</Badge>
-                  <Badge tone={item.indexingStatus === 'completed' ? 'success' : item.indexingStatus === 'failed' ? 'danger' : item.indexingStatus === 'processing' ? 'info' : 'neutral'}>{item.indexingStatus || 'not_indexed'}</Badge>
+                  <Badge tone={item.indexingStatus === 'completed' ? 'success' : item.indexingStatus === 'failed' ? 'danger' : item.indexingStatus === 'processing' ? 'info' : 'neutral'}>{getIndexingStatusLabel(item.indexingStatus)}</Badge>
                 </div>
                 <p className="mt-2 text-sm text-slate-500">v{item.version || '1.0.0'} · {item.author || 'Admin'} · {item.lastUpdated ? new Date(item.lastUpdated).toLocaleDateString() : '-'}</p>
                 {item.hasFile ? (
@@ -1224,12 +1295,30 @@ const DocumentsPageV2 = () => {
   if (loading) return <Loading label="Cargando documentos..." />;
   if (error) return <ErrorBox message={error} onRetry={load} />;
 
+  const filteredItems = items.filter((item) =>
+    statusFilter === 'all' ? true : item.systemStatus === statusFilter,
+  );
+  const statusCounts = items.reduce(
+    (acc, item) => {
+      const key = item.systemStatus || 'processed';
+      if (key in acc) {
+        acc[key as 'processed' | 'pending' | 'uploaded_not_extracted'] += 1;
+      }
+      return acc;
+    },
+    {
+      processed: 0,
+      pending: 0,
+      uploaded_not_extracted: 0,
+    },
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Documentos</h1>
-          <p className="text-slate-500">Gestion documental + preparacion IA</p>
+          <p className="text-slate-500">Gestion documental + trazabilidad de extraccion</p>
         </div>
         <div className="flex gap-3">
           <button onClick={load} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700">Actualizar</button>
@@ -1237,8 +1326,42 @@ const DocumentsPageV2 = () => {
         </div>
       </div>
       {formError ? <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{formError}</div> : null}
+      <div className="grid gap-3 md:grid-cols-4">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <p className="text-sm font-medium text-emerald-800">Listos para usar</p>
+          <p className="mt-2 text-2xl font-bold text-emerald-900">{statusCounts.processed}</p>
+        </div>
+        <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+          <p className="text-sm font-medium text-sky-800">En proceso</p>
+          <p className="mt-2 text-2xl font-bold text-sky-900">{statusCounts.pending}</p>
+        </div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-medium text-amber-800">Subidos sin texto</p>
+          <p className="mt-2 text-2xl font-bold text-amber-900">{statusCounts.uploaded_not_extracted}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-sm font-medium text-slate-700">Filtro por estado</p>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
+          >
+            <option value="all">Todos</option>
+            <option value="processed">Listos para usar</option>
+            <option value="pending">Procesando</option>
+            <option value="uploaded_not_extracted">Subidos sin texto extraido</option>
+          </select>
+        </div>
+      </div>
       <div className="space-y-4">
-        {items.map((item) => (
+        {filteredItems.map((item) => {
+          const statusMeta = getDocumentStatusMeta(item.systemStatus);
+          const canRetryExtraction =
+            item.hasFile &&
+            (item.systemStatus === 'uploaded_not_extracted' ||
+              item.systemStatus === 'failed');
+
+          return (
           <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -1247,6 +1370,7 @@ const DocumentsPageV2 = () => {
                   <Badge tone="info">{item.category}</Badge>
                   <Badge tone={item.status === 'published' ? 'success' : item.status === 'draft' ? 'warning' : 'neutral'}>{item.status}</Badge>
                   <Badge tone={item.hasFile ? 'info' : 'neutral'}>{item.hasFile ? 'archivo' : 'manual'}</Badge>
+                  <Badge tone={statusMeta.tone}>{statusMeta.label}</Badge>
                   <Badge tone={item.retrievalMode === 'semantic' ? 'success' : item.retrievalMode === 'keyword' ? 'warning' : 'neutral'}>{item.retrievalMode || 'none'}</Badge>
                   <Badge tone={item.indexingStatus === 'completed' ? 'success' : item.indexingStatus === 'failed' ? 'danger' : item.indexingStatus === 'processing' ? 'info' : 'neutral'}>{item.indexingStatus || 'not_indexed'}</Badge>
                 </div>
@@ -1254,20 +1378,42 @@ const DocumentsPageV2 = () => {
                 {item.hasFile ? <p className="mt-1 text-sm text-slate-500">{item.originalFileName || item.storedFileName} · {Math.round((item.fileSize || 0) / 1024)} KB · extraccion: {item.extractionStatus || 'pending'}</p> : null}
                 <p className="mt-1 text-sm text-slate-500">estado: {item.processingStatus || 'processed'} · chunks: {item.chunkCount || 0}{item.embeddingModel ? ` · embeddings: ${item.embeddingModel}` : ''}</p>
                 <p className="mt-1 text-sm text-slate-500">texto extraido: {item.extractedTextAvailable ? 'si' : 'no'} · caracteres: {item.extractedTextLength || 0}{item.lastProcessedAt ? ` · ultimo proceso: ${new Date(item.lastProcessedAt).toLocaleString()}` : ''}</p>
-                {item.processingError ? <p className="mt-2 text-sm text-red-600">Error: {item.processingError}</p> : null}
+                <div className={cx(
+                  'mt-3 rounded-lg border p-3 text-sm',
+                  statusMeta.tone === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-800',
+                  statusMeta.tone === 'info' && 'border-sky-200 bg-sky-50 text-sky-800',
+                  statusMeta.tone === 'warning' && 'border-amber-200 bg-amber-50 text-amber-800',
+                  statusMeta.tone === 'danger' && 'border-red-200 bg-red-50 text-red-800',
+                  statusMeta.tone === 'neutral' && 'border-slate-200 bg-slate-50 text-slate-700',
+                )}>
+                  <p className="font-medium">{statusMeta.label}</p>
+                  <p className="mt-1">{statusMeta.helper}</p>
+                  {item.systemStatus === 'uploaded_not_extracted' ? (
+                    <p className="mt-2 text-xs">
+                      El archivo sigue disponible para descarga y para reintentar extraccion.
+                    </p>
+                  ) : null}
+                </div>
+                {item.processingError ? (
+                  <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                    <p className="font-medium text-slate-900">Detalle administrativo</p>
+                    <p className="mt-1">{item.processingError}</p>
+                  </div>
+                ) : null}
                 <p className="mt-3 line-clamp-3 text-sm text-slate-600">{item.content || 'Sin contenido'}</p>
               </div>
               <div className="flex flex-wrap justify-end gap-2">
                 {item.hasFile ? <button onClick={() => void documentsService.download(item.id, item.originalFileName || item.title)} className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">Descargar</button> : null}
-                <button onClick={() => void runAction(item, 'view')} disabled={processingId === item.id} className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60">Ver texto</button>
-                <button onClick={() => void runAction(item, 'reprocess')} disabled={processingId === item.id} className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60">{processingId === item.id ? 'Procesando...' : 'Reprocess'}</button>
-                <button onClick={() => void runAction(item, 'reindex')} disabled={processingId === item.id} className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60">{processingId === item.id ? 'Procesando...' : 'Reindex'}</button>
+                <button onClick={() => void runAction(item, 'view')} disabled={processingId === item.id} className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60">Ver detalle</button>
+                <button onClick={() => void runAction(item, 'reprocess')} disabled={processingId === item.id} className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60">{processingId === item.id ? 'Procesando...' : canRetryExtraction ? 'Reintentar extraccion' : 'Reprocesar'}</button>
+                <button onClick={() => void runAction(item, 'reindex')} disabled={processingId === item.id} className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60">Reindexar</button>
                 <button onClick={() => openEdit(item)} className="rounded-lg p-2 hover:bg-slate-100"><Pencil className="h-4 w-4" /></button>
                 <button onClick={() => setDeleteTarget(item)} className="rounded-lg p-2 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
               </div>
             </div>
           </div>
-        ))}
+        );
+        })}
       </div>
       <Modal open={selected !== null} title={selected?.id ? 'Editar documento' : 'Nuevo documento'} onClose={closeEditor}>
         <div className="space-y-4">
@@ -1304,17 +1450,39 @@ const DocumentsPageV2 = () => {
           </div>
         ) : null}
       </Modal>
-      <Modal open={!!extractedView} title="Texto extraido" onClose={() => setExtractedView(null)}>
+      <Modal open={!!extractedView} title="Detalle del documento" onClose={() => setExtractedView(null)}>
         {extractedView ? (
           <div className="space-y-4">
+            <div className={cx(
+              'rounded-lg border p-3 text-sm',
+              getDocumentStatusMeta(extractedView.systemStatus).tone === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-800',
+              getDocumentStatusMeta(extractedView.systemStatus).tone === 'info' && 'border-sky-200 bg-sky-50 text-sky-800',
+              getDocumentStatusMeta(extractedView.systemStatus).tone === 'warning' && 'border-amber-200 bg-amber-50 text-amber-800',
+              getDocumentStatusMeta(extractedView.systemStatus).tone === 'danger' && 'border-red-200 bg-red-50 text-red-800',
+              getDocumentStatusMeta(extractedView.systemStatus).tone === 'neutral' && 'border-slate-200 bg-slate-50 text-slate-700',
+            )}>
+              <p className="font-medium">{getDocumentStatusMeta(extractedView.systemStatus).label}</p>
+              <p className="mt-1">{getDocumentStatusMeta(extractedView.systemStatus).helper}</p>
+            </div>
             <div className="grid gap-2 text-sm text-slate-600 md:grid-cols-2">
               <p><strong>Titulo:</strong> {extractedView.title}</p>
-              <p><strong>Extraccion:</strong> {extractedView.extractionStatus}</p>
+              <p><strong>Estado visible:</strong> {getDocumentStatusMeta(extractedView.systemStatus).label}</p>
+              <p><strong>Extraccion:</strong> {getExtractionStatusLabel(extractedView.extractionStatus)}</p>
               <p><strong>Procesamiento:</strong> {extractedView.processingStatus}</p>
-              <p><strong>Indexacion:</strong> {extractedView.indexingStatus}</p>
+              <p><strong>Indexacion:</strong> {getIndexingStatusLabel(extractedView.indexingStatus)}</p>
               <p><strong>Caracteres:</strong> {extractedView.extractedTextLength || 0}</p>
             </div>
-            {extractedView.processingError ? <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{extractedView.processingError}</div> : null}
+            {extractedView.processingError ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                <p className="font-medium text-slate-900">Detalle administrativo</p>
+                <p className="mt-1">{extractedView.processingError}</p>
+              </div>
+            ) : null}
+            {!extractedView.extractedText ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                No hay texto disponible para vista previa. El archivo sigue disponible y puedes reintentar la extraccion desde la lista.
+              </div>
+            ) : null}
             <textarea readOnly rows={18} value={extractedView.extractedText || ''} className={inputClassName} />
           </div>
         ) : null}
