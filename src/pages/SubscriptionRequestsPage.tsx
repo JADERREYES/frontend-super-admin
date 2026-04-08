@@ -48,6 +48,20 @@ const requestTypeLabel: Record<PremiumRequestAdminItem['requestType'], string> =
   custom: 'Personalizado',
 };
 
+const requestStatusLabel: Record<PremiumRequestAdminItem['status'], string> = {
+  new: 'Recibida',
+  receipt_uploaded: 'Comprobante recibido',
+  submitted: 'Enviada',
+  under_review: 'En revision',
+  contacted: 'Pendiente de contacto',
+  pending_payment: 'Pendiente de pago',
+  paid: 'Pago reportado',
+  awaiting_validation: 'Validando pago',
+  approved: 'Aprobada',
+  activated: 'Plan activado',
+  rejected: 'Rechazada',
+};
+
 const requestStatusTone: Record<PremiumRequestAdminItem['status'], 'info' | 'warning' | 'success' | 'danger'> = {
   new: 'info',
   receipt_uploaded: 'info',
@@ -75,7 +89,18 @@ export function SubscriptionRequestsPage() {
   const [activating, setActivating] = useState(false);
   const [error, setError] = useState('');
   const [formError, setFormError] = useState('');
+  const [statusFilter, setStatusFilter] = useState<
+    'all' | PremiumRequestAdminItem['status']
+  >('all');
   const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+  const resolveAssetUrl = (path?: string) => {
+    if (!path) return '';
+    if (/^https?:\/\//i.test(path)) {
+      return path;
+    }
+    return `${apiBaseUrl}${path}`;
+  };
 
   const load = async () => {
     try {
@@ -92,6 +117,11 @@ export function SubscriptionRequestsPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  const filteredItems =
+    statusFilter === 'all'
+      ? items
+      : items.filter((item) => item.status === statusFilter);
 
   const openEditor = (item: PremiumRequestAdminItem) => {
     setSelected(item);
@@ -149,34 +179,69 @@ export function SubscriptionRequestsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div><h1 className="text-2xl font-bold text-slate-900">Solicitudes premium y pagos</h1><p className="text-slate-500">Revisa comprobantes, cambia estados y activa el plan</p></div>
-        <button onClick={load} className="rounded-lg bg-teal-600 px-4 py-2 text-sm text-white">Actualizar</button>
+        <div className="flex items-center gap-3">
+          <select
+            value={statusFilter}
+            onChange={(event) =>
+              setStatusFilter(
+                event.target.value as 'all' | PremiumRequestAdminItem['status'],
+              )
+            }
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none"
+          >
+            <option value="all">Todos los estados</option>
+            <option value="new">Recibidas</option>
+            <option value="receipt_uploaded">Comprobante recibido</option>
+            <option value="submitted">Enviadas</option>
+            <option value="under_review">En revision</option>
+            <option value="contacted">Pendiente de contacto</option>
+            <option value="pending_payment">Pendiente de pago</option>
+            <option value="paid">Pago reportado</option>
+            <option value="awaiting_validation">Validando pago</option>
+            <option value="approved">Aprobadas</option>
+            <option value="activated">Activadas</option>
+            <option value="rejected">Rechazadas</option>
+          </select>
+          <button onClick={load} className="rounded-lg bg-teal-600 px-4 py-2 text-sm text-white">Actualizar</button>
+        </div>
       </div>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <table className="w-full">
           <thead className="bg-slate-50 text-left text-xs uppercase text-slate-600"><tr><th className="px-6 py-4">Usuario</th><th className="px-6 py-4">Plan</th><th className="px-6 py-4">Metodo</th><th className="px-6 py-4">Estado</th><th className="px-6 py-4">Fecha</th><th className="px-6 py-4 text-right">Acciones</th></tr></thead>
           <tbody className="divide-y divide-slate-100">
-            {items.map((item) => (
+            {filteredItems.map((item) => (
               <tr key={item._id} className="hover:bg-slate-50">
                 <td className="px-6 py-4"><div className="font-medium text-slate-900">{item.userName}</div><div className="text-sm text-slate-500">{item.userEmail}</div></td>
                 <td className="px-6 py-4"><div className="font-medium text-slate-700">{item.planName}</div><div className="text-xs text-slate-500">{requestTypeLabel[item.requestType]} · {formatMoney(item.planSnapshot.price, item.planSnapshot.currency)}</div></td>
                 <td className="px-6 py-4 text-sm text-slate-600">{item.paymentMethodSnapshot.name}</td>
-                <td className="px-6 py-4"><Badge tone={requestStatusTone[item.status]}>{item.status}</Badge></td>
+                <td className="px-6 py-4"><Badge tone={requestStatusTone[item.status]}>{requestStatusLabel[item.status]}</Badge></td>
                 <td className="px-6 py-4 text-sm text-slate-500">{new Date(item.createdAt).toLocaleString()}</td>
                 <td className="px-6 py-4 text-right"><button onClick={() => openEditor(item)} className="rounded-lg p-2 hover:bg-slate-100"><Pencil className="h-4 w-4" /></button></td>
               </tr>
             ))}
           </tbody>
         </table>
+        {filteredItems.length === 0 ? (
+          <div className="border-t border-slate-100 px-6 py-8 text-center text-sm text-slate-500">
+            No hay solicitudes para el estado seleccionado.
+          </div>
+        ) : null}
       </div>
       <Modal open={!!selected} title="Gestionar solicitud" onClose={closeEditor}>
         {selected ? (
           <div className="space-y-4">
             {formError ? <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{formError}</div> : null}
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              <p className="font-medium text-slate-900">Estado actual</p>
+              <p className="mt-1">
+                {requestStatusLabel[selected.status]}. Puedes actualizar el seguimiento o activar el plan cuando el pago ya este validado.
+              </p>
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
               <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Usuario</span><input value={`${selected.userName} (${selected.userEmail})`} disabled className={inputClassName} /></label>
               <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Plan</span><input value={`${selected.planName} (${requestTypeLabel[selected.requestType]})`} disabled className={inputClassName} /></label>
               <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Metodo</span><input value={`${selected.paymentMethodSnapshot.name} - ${selected.paymentMethodSnapshot.accountValue || selected.paymentMethodSnapshot.accountNumber || 'sin cuenta'}`} disabled className={inputClassName} /></label>
-              <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Estado</span><select value={draftStatus} onChange={(e) => setDraftStatus(e.target.value as PremiumRequestAdminItem['status'])} className={inputClassName}><option value="new">new</option><option value="receipt_uploaded">receipt_uploaded</option><option value="submitted">submitted</option><option value="under_review">under_review</option><option value="contacted">contacted</option><option value="pending_payment">pending_payment</option><option value="paid">paid</option><option value="awaiting_validation">awaiting_validation</option><option value="approved">approved</option><option value="activated">activated</option><option value="rejected">rejected</option></select></label>
+              <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Estado</span><select value={draftStatus} onChange={(e) => setDraftStatus(e.target.value as PremiumRequestAdminItem['status'])} className={inputClassName}><option value="new">Recibida</option><option value="receipt_uploaded">Comprobante recibido</option><option value="submitted">Enviada</option><option value="under_review">En revision</option><option value="contacted">Pendiente de contacto</option><option value="pending_payment">Pendiente de pago</option><option value="paid">Pago reportado</option><option value="awaiting_validation">Validando pago</option><option value="approved">Aprobada</option><option value="activated">Plan activado</option><option value="rejected">Rechazada</option></select></label>
               <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Precio</span><input value={formatMoney(selected.planSnapshot.price, selected.planSnapshot.currency)} disabled className={inputClassName} /></label>
               <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Duracion</span><input value={`${selected.planSnapshot.durationDays} dias`} disabled className={inputClassName} /></label>
             </div>
@@ -185,7 +250,7 @@ export function SubscriptionRequestsPage() {
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
                 <p className="font-medium text-slate-900">Comprobante</p>
                 <p className="mt-1">{selected.proofOriginalName || selected.receiptFileName || 'Archivo adjunto'}</p>
-                <a href={`${apiBaseUrl}${selected.proofUrl || selected.receiptUrl}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm text-white">Ver comprobante</a>
+                <a href={resolveAssetUrl(selected.proofUrl || selected.receiptUrl)} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm text-white">Ver comprobante</a>
               </div>
             ) : null}
             <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Notas administrativas</span><textarea rows={5} value={draftNotes} onChange={(e) => setDraftNotes(e.target.value)} className={inputClassName} /></label>

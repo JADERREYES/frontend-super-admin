@@ -918,6 +918,9 @@ const AlertsPage = ({ onCountChange }: { onCountChange?: (count: number) => void
         <Card title="Investigando" value={items.filter((item) => item.status === 'investigating').length} />
         <Card title="Resueltas" value={items.filter((item) => item.status === 'resolved').length} />
       </div>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+        Estos documentos son internos de administracion. No forman parte del flujo del usuario final y no se mostraran en frontend-usuario.
+      </div>
       <div className="space-y-4">
         {items.map((item) => (
           <button key={item.id} onClick={() => openEditor(item)} className="w-full rounded-xl border border-slate-200 bg-white p-5 text-left hover:border-slate-300">
@@ -1318,7 +1321,7 @@ const DocumentsPageV2 = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Documentos</h1>
-          <p className="text-slate-500">Gestion documental + trazabilidad de extraccion</p>
+          <p className="text-slate-500">Modulo interno para enriquecer el conocimiento del sistema y mejorar respuestas del chat.</p>
         </div>
         <div className="flex gap-3">
           <button onClick={load} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700">Actualizar</button>
@@ -1372,7 +1375,7 @@ const DocumentsPageV2 = () => {
                   <Badge tone={item.hasFile ? 'info' : 'neutral'}>{item.hasFile ? 'archivo' : 'manual'}</Badge>
                   <Badge tone={statusMeta.tone}>{statusMeta.label}</Badge>
                   <Badge tone={item.retrievalMode === 'semantic' ? 'success' : item.retrievalMode === 'keyword' ? 'warning' : 'neutral'}>{item.retrievalMode || 'none'}</Badge>
-                  <Badge tone={item.indexingStatus === 'completed' ? 'success' : item.indexingStatus === 'failed' ? 'danger' : item.indexingStatus === 'processing' ? 'info' : 'neutral'}>{item.indexingStatus || 'not_indexed'}</Badge>
+                  <Badge tone={item.indexingStatus === 'completed' ? 'success' : item.indexingStatus === 'failed' ? 'danger' : item.indexingStatus === 'processing' ? 'info' : 'neutral'}>{getIndexingStatusLabel(item.indexingStatus)}</Badge>
                 </div>
                 <p className="mt-2 text-sm text-slate-500">v{item.version || '1.0.0'} · {item.author || 'Admin'} · {item.lastUpdated ? new Date(item.lastUpdated).toLocaleDateString() : '-'}</p>
                 {item.hasFile ? <p className="mt-1 text-sm text-slate-500">{item.originalFileName || item.storedFileName} · {Math.round((item.fileSize || 0) / 1024)} KB · extraccion: {item.extractionStatus || 'pending'}</p> : null}

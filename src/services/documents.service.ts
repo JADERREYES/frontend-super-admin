@@ -28,7 +28,7 @@ const deriveSystemStatus = (document: any) => {
 const normalize = (document: any) => ({
   ...document,
   id: document._id || document.id,
-  hasFile: !!document.hasFile || !!document.storagePath,
+  hasFile: !!document.hasFile || !!document.fileUrl || !!document.storagePath,
   lastUpdated: document.lastUpdated || document.updatedAt || null,
   systemStatus: document.systemStatus || deriveSystemStatus(document),
 });
