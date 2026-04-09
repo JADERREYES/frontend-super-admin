@@ -125,6 +125,18 @@ const isPreviewableImage = (mimeType?: string, url?: string) =>
 const isPdf = (mimeType?: string, url?: string) =>
   Boolean(mimeType === 'application/pdf' || /\.pdf$/i.test(url || ''));
 
+const isOperationallyPending = (status: PremiumRequestAdminItem['status']) =>
+  [
+    'new',
+    'receipt_uploaded',
+    'submitted',
+    'under_review',
+    'contacted',
+    'pending_payment',
+    'paid',
+    'awaiting_validation',
+  ].includes(status);
+
 export function SubscriptionRequestsPage() {
   const [items, setItems] = useState<PremiumRequestAdminItem[]>([]);
   const [selected, setSelected] = useState<PremiumRequestAdminItem | null>(null);
@@ -173,6 +185,14 @@ export function SubscriptionRequestsPage() {
       : items.filter((item) => item.status === statusFilter);
   const hasAnyRequests = items.length > 0;
   const isFilterHidingResults = hasAnyRequests && filteredItems.length === 0;
+  const pendingCount = items.filter((item) => isOperationallyPending(item.status)).length;
+  const newCount = items.filter(
+    (item) => item.status === 'new' || item.status === 'submitted',
+  ).length;
+  const manualOnlyCount = items.filter(
+    (item) => !item.proofUrl && !item.receiptUrl,
+  ).length;
+  const activatedCount = items.filter((item) => item.status === 'activated').length;
 
   const openEditor = (item: PremiumRequestAdminItem) => {
     setSelected(item);
@@ -298,6 +318,25 @@ export function SubscriptionRequestsPage() {
         existe y la activacion final del plan.
       </div>
 
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-medium text-amber-800">Pendientes</p>
+          <p className="mt-2 text-2xl font-bold text-amber-950">{pendingCount}</p>
+        </div>
+        <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+          <p className="text-sm font-medium text-sky-800">Nuevas</p>
+          <p className="mt-2 text-2xl font-bold text-sky-950">{newCount}</p>
+        </div>
+        <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+          <p className="text-sm font-medium text-violet-800">Solo datos manuales</p>
+          <p className="mt-2 text-2xl font-bold text-violet-950">{manualOnlyCount}</p>
+        </div>
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <p className="text-sm font-medium text-emerald-800">Activadas</p>
+          <p className="mt-2 text-2xl font-bold text-emerald-950">{activatedCount}</p>
+        </div>
+      </div>
+
       <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
         {hasAnyRequests ? (
           <span>
@@ -328,7 +367,16 @@ export function SubscriptionRequestsPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filteredItems.map((item) => (
-              <tr key={item._id} className="hover:bg-slate-50">
+              <tr
+                key={item._id}
+                className={`hover:bg-slate-50 ${
+                  isOperationallyPending(item.status)
+                    ? 'bg-amber-50/40'
+                    : item.status === 'activated'
+                      ? 'bg-emerald-50/35'
+                      : ''
+                }`}
+              >
                 <td className="px-6 py-4">
                   <div className="font-medium text-slate-900">{item.userName}</div>
                   <div className="text-sm text-slate-500">{item.userEmail}</div>
@@ -371,6 +419,11 @@ export function SubscriptionRequestsPage() {
                   <Badge tone={requestStatusTone[item.status]}>
                     {requestStatusLabel[item.status]}
                   </Badge>
+                  {isOperationallyPending(item.status) ? (
+                    <div className="mt-2">
+                      <Badge tone="warning">Requiere revision</Badge>
+                    </div>
+                  ) : null}
                 </td>
                 <td className="px-6 py-4 text-sm text-slate-500">
                   {new Date(item.createdAt).toLocaleString()}

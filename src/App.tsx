@@ -312,7 +312,18 @@ const LoginPage = ({ onLogin }: { onLogin: (user: any) => void }) => {
   );
 };
 
-const DashboardPage = () => {
+const DashboardPage = ({
+  premiumSummary,
+  onRefreshOperational,
+}: {
+  premiumSummary: {
+    totalPending: number;
+    totalNew: number;
+    totalManualOnly: number;
+    totalWithProof: number;
+  };
+  onRefreshOperational: () => void;
+}) => {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -344,7 +355,10 @@ const DashboardPage = () => {
           <p className="text-slate-500">Datos reales del backend</p>
         </div>
         <button
-          onClick={load}
+          onClick={() => {
+            void load();
+            void onRefreshOperational();
+          }}
           className="rounded-lg bg-teal-600 px-4 py-2 text-sm text-white"
         >
           <RefreshCw className="inline h-4 w-4" /> Actualizar
@@ -355,6 +369,36 @@ const DashboardPage = () => {
         <Card title="Usuarios Activos" value={data?.stats?.activeUsers || 0} />
         <Card title="Chats Totales" value={data?.stats?.totalChats || 0} />
         <Card title="Premium" value={data?.stats?.premiumUsers || 0} />
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-amber-800">
+                Solicitudes premium pendientes
+              </p>
+              <p className="mt-2 text-3xl font-bold text-amber-950">
+                {premiumSummary.totalPending}
+              </p>
+            </div>
+            <Bell className="h-8 w-8 text-amber-700" />
+          </div>
+          <p className="mt-3 text-sm text-amber-900">
+            Nuevas: {premiumSummary.totalNew} · Con comprobante:{' '}
+            {premiumSummary.totalWithProof} · Solo datos manuales:{' '}
+            {premiumSummary.totalManualOnly}
+          </p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <p className="text-sm font-medium text-slate-700">
+            Respuesta operativa recomendada
+          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Revisa primero las solicitudes nuevas o pendientes. Las solicitudes sin
+            comprobante siguen siendo validas si traen telefono, monto y metodo de
+            pago.
+          </p>
+        </div>
       </div>
       <div className="rounded-xl border border-slate-200 bg-white">
         <div className="border-b border-slate-200 p-5">
@@ -1381,12 +1425,12 @@ const DocumentsPageV2 = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Documentos</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Documentos internos / RAG</h1>
           <p className="text-slate-500">Modulo interno para enriquecer el conocimiento del sistema y mejorar respuestas del chat.</p>
         </div>
         <div className="flex gap-3">
           <button onClick={load} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700">Actualizar</button>
-          <button onClick={openCreate} className="rounded-lg bg-teal-600 px-4 py-2 text-sm text-white"><Plus className="mr-1 inline h-4 w-4" /> Nuevo documento</button>
+          <button onClick={openCreate} className="rounded-lg bg-teal-600 px-4 py-2 text-sm text-white"><Plus className="mr-1 inline h-4 w-4" /> Subir documento</button>
         </div>
       </div>
       {formError ? <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{formError}</div> : null}
@@ -1684,6 +1728,12 @@ export default function App() {
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [userName, setUserName] = useState('Admin');
   const [alertsCount, setAlertsCount] = useState(0);
+  const [premiumSummary, setPremiumSummary] = useState({
+    totalPending: 0,
+    totalNew: 0,
+    totalManualOnly: 0,
+    totalWithProof: 0,
+  });
   const [booting, setBooting] = useState(true);
 
   const loadAlertCount = async () => {
@@ -1693,6 +1743,37 @@ export default function App() {
       setAlertsCount(alerts.filter((item: any) => item.status !== 'resolved').length);
     } catch {
       setAlertsCount(0);
+    }
+  };
+
+  const loadPremiumSummary = async () => {
+    if (!authService.isAuthenticated()) return;
+    try {
+      const items = await premiumRequestsService.getAll();
+      const pendingStatuses = [
+        'new',
+        'receipt_uploaded',
+        'submitted',
+        'under_review',
+        'contacted',
+        'pending_payment',
+        'paid',
+        'awaiting_validation',
+      ];
+
+      setPremiumSummary({
+        totalPending: items.filter((item) => pendingStatuses.includes(item.status)).length,
+        totalNew: items.filter((item) => item.status === 'new' || item.status === 'submitted').length,
+        totalManualOnly: items.filter((item) => !item.proofUrl && !item.receiptUrl).length,
+        totalWithProof: items.filter((item) => Boolean(item.proofUrl || item.receiptUrl)).length,
+      });
+    } catch {
+      setPremiumSummary({
+        totalPending: 0,
+        totalNew: 0,
+        totalManualOnly: 0,
+        totalWithProof: 0,
+      });
     }
   };
 
@@ -1713,11 +1794,18 @@ export default function App() {
           localStorage.setItem('admin_user', JSON.stringify(profile));
           setPage('dashboard');
           await loadAlertCount();
+          await loadPremiumSummary();
         }
       } catch {
         authService.logout();
         setPage('login');
         setAlertsCount(0);
+        setPremiumSummary({
+          totalPending: 0,
+          totalNew: 0,
+          totalManualOnly: 0,
+          totalWithProof: 0,
+        });
       } finally {
         setBooting(false);
       }
@@ -1741,7 +1829,7 @@ export default function App() {
 
   const render = () => {
     switch (page) {
-      case 'dashboard': return <DashboardPage />;
+      case 'dashboard': return <DashboardPage premiumSummary={premiumSummary} onRefreshOperational={loadPremiumSummary} />;
       case 'users': return <UsersPage />;
       case 'subscriptions': return <SubscriptionsPage />;
       case 'paymentMethods': return <PaymentMethodsPage />;
@@ -1756,7 +1844,7 @@ export default function App() {
   };
 
   if (booting) return <Loading label="Validando sesion administrativa..." />;
-  if (page === 'login') return <LoginPage onLogin={(user) => { setUserName(user?.name || user?.email?.split('@')[0] || 'Admin'); setPage('dashboard'); void loadAlertCount(); }} />;
+  if (page === 'login') return <LoginPage onLogin={(user) => { setUserName(user?.name || user?.email?.split('@')[0] || 'Admin'); setPage('dashboard'); void loadAlertCount(); void loadPremiumSummary(); }} />;
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -1770,7 +1858,11 @@ export default function App() {
           {nav.map((item) => (
             <button key={item.id} onClick={() => { setPage(item.id); setMobileOpen(false); }} className={cx('flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium', page === item.id ? 'bg-teal-50 text-teal-700' : 'text-slate-600 hover:bg-slate-50', !sidebarOpen && 'justify-center')}>
               {item.icon}
-              {sidebarOpen ? <><span className="flex-1 text-left">{item.label}</span>{item.id === 'alerts' && alertsCount ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">{alertsCount}</span> : null}</> : null}
+              {sidebarOpen ? <>
+                <span className="flex-1 text-left">{item.label}</span>
+                {item.id === 'alerts' && alertsCount ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">{alertsCount}</span> : null}
+                {item.id === 'subscriptionRequests' && premiumSummary.totalPending ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">{premiumSummary.totalPending}</span> : null}
+              </> : null}
             </button>
           ))}
         </nav>
@@ -1786,7 +1878,7 @@ export default function App() {
             <span className="hidden text-sm font-medium text-slate-900 md:block">{nav.find((item) => item.id === page)?.label}</span>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={() => void loadAlertCount()} className="rounded-lg p-2 hover:bg-slate-100"><RefreshCw className="h-5 w-5 text-slate-600" /></button>
+            <button onClick={() => { void loadAlertCount(); void loadPremiumSummary(); }} className="rounded-lg p-2 hover:bg-slate-100"><RefreshCw className="h-5 w-5 text-slate-600" /></button>
             <div className="flex items-center gap-3 border-l border-slate-200 pl-3">
               <div className="hidden text-right md:block"><p className="text-sm font-medium text-slate-900">{userName}</p><p className="text-xs text-slate-500">Super Admin</p></div>
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-600 text-sm font-bold text-white">{userName.charAt(0).toUpperCase()}</div>
