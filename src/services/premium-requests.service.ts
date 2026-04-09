@@ -27,7 +27,12 @@ export type PremiumRequestAdminItem = {
   };
   message: string;
   proofUrl?: string;
+  proofFileUrl?: string;
+  proofStorageProvider?: string;
+  proofStorageKey?: string;
   proofOriginalName?: string;
+  proofMimeType?: string;
+  proofSize?: number;
   receiptUrl?: string;
   receiptFileName?: string;
   status:
