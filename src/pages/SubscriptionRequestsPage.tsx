@@ -168,6 +168,8 @@ export function SubscriptionRequestsPage() {
     statusFilter === 'all'
       ? items
       : items.filter((item) => item.status === statusFilter);
+  const hasAnyRequests = items.length > 0;
+  const isFilterHidingResults = hasAnyRequests && filteredItems.length === 0;
 
   const openEditor = (item: PremiumRequestAdminItem) => {
     setSelected(item);
@@ -293,6 +295,21 @@ export function SubscriptionRequestsPage() {
         activacion final del plan.
       </div>
 
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+        {hasAnyRequests ? (
+          <span>
+            Mostrando <strong>{filteredItems.length}</strong> de{' '}
+            <strong>{items.length}</strong> solicitudes. Filtro actual:{' '}
+            <strong>
+              {statusFilter === 'all' ? 'Todos los estados' : requestStatusLabel[statusFilter]}
+            </strong>
+            .
+          </span>
+        ) : (
+          <span>No hay solicitudes premium registradas todavia.</span>
+        )}
+      </div>
+
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <table className="w-full">
           <thead className="bg-slate-50 text-left text-xs uppercase text-slate-600">
@@ -360,7 +377,9 @@ export function SubscriptionRequestsPage() {
         </table>
         {filteredItems.length === 0 ? (
           <div className="border-t border-slate-100 px-6 py-8 text-center text-sm text-slate-500">
-            No hay solicitudes para el estado seleccionado.
+            {isFilterHidingResults
+              ? 'No hay solicitudes para el filtro actual. Cambia a "Todos los estados" para ver el resto.'
+              : 'No hay solicitudes premium registradas todavia.'}
           </div>
         ) : null}
       </div>
