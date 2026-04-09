@@ -72,6 +72,9 @@ const requestTypeLabel: Record<PremiumRequestAdminItem['requestType'], string> =
   custom: 'Personalizado',
 };
 
+const formatReportedAmount = (value?: number) =>
+  value && value > 0 ? formatMoney(value, 'COP') : 'No reportado';
+
 const requestStatusLabel: Record<PremiumRequestAdminItem['status'], string> = {
   new: 'Recibida',
   receipt_uploaded: 'Comprobante recibido',
@@ -290,9 +293,9 @@ export function SubscriptionRequestsPage() {
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-        Esta pantalla concentra las solicitudes premium con comprobante adjunto.
-        Aqui se visualizan los pagos recibidos, el archivo del recibo y la
-        activacion final del plan.
+        Esta pantalla concentra las solicitudes premium con o sin comprobante.
+        Aqui se visualizan los datos reportados por el usuario, el archivo si
+        existe y la activacion final del plan.
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
@@ -316,7 +319,7 @@ export function SubscriptionRequestsPage() {
             <tr>
               <th className="px-6 py-4">Usuario</th>
               <th className="px-6 py-4">Plan</th>
-              <th className="px-6 py-4">Metodo</th>
+              <th className="px-6 py-4">Pago reportado</th>
               <th className="px-6 py-4">Comprobante</th>
               <th className="px-6 py-4">Estado</th>
               <th className="px-6 py-4">Fecha</th>
@@ -338,7 +341,16 @@ export function SubscriptionRequestsPage() {
                   </div>
                 </td>
                 <td className="px-6 py-4 text-sm text-slate-600">
-                  {item.paymentMethodSnapshot.name}
+                  <div className="font-medium text-slate-700">
+                    {formatReportedAmount(item.reportedAmount)}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {item.payerName || 'Sin nombre'} · {item.payerPhone || 'Sin telefono'}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {item.paymentMethodSnapshot.name}
+                    {item.paidAtReference ? ` · ${item.paidAtReference}` : ''}
+                  </div>
                 </td>
                 <td className="px-6 py-4 text-sm text-slate-600">
                   {item.proofUrl || item.receiptUrl ? (
@@ -352,7 +364,7 @@ export function SubscriptionRequestsPage() {
                       Ver archivo
                     </a>
                   ) : (
-                    <span className="text-xs text-slate-400">Sin adjunto</span>
+                    <span className="text-xs text-slate-500">Solo datos manuales</span>
                   )}
                 </td>
                 <td className="px-6 py-4">
@@ -422,6 +434,30 @@ export function SubscriptionRequestsPage() {
                 <span className="text-sm font-medium text-slate-700">Metodo</span>
                 <input
                   value={`${selected.paymentMethodSnapshot.name} - ${selected.paymentMethodSnapshot.accountValue || selected.paymentMethodSnapshot.accountNumber || 'sin cuenta'}`}
+                  disabled
+                  className={inputClassName}
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-slate-700">Monto reportado</span>
+                <input
+                  value={formatReportedAmount(selected.reportedAmount)}
+                  disabled
+                  className={inputClassName}
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-slate-700">Pagador</span>
+                <input
+                  value={`${selected.payerName || 'Sin nombre'} - ${selected.payerPhone || 'Sin telefono'}`}
+                  disabled
+                  className={inputClassName}
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-slate-700">Referencia temporal</span>
+                <input
+                  value={selected.paidAtReference || 'Sin referencia'}
                   disabled
                   className={inputClassName}
                 />
@@ -541,7 +577,8 @@ export function SubscriptionRequestsPage() {
               </div>
             ) : (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                Esta solicitud no tiene comprobante adjunto visible.
+                Esta solicitud llego solo con datos manuales. Puedes revisarla,
+                contactar al usuario y activar el plan si el pago ya fue validado.
               </div>
             )}
 
