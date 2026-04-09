@@ -29,6 +29,7 @@ import { alertsService } from './services/alerts.service';
 import { documentsService } from './services/documents.service';
 import { settingsService } from './services/settings.service';
 import { statsService } from './services/stats.service';
+import { plansService } from './services/plans.service';
 import {
   premiumRequestsService,
   type PremiumRequestAdminItem,
@@ -485,8 +486,9 @@ const UsersPage = () => {
 
 const SubscriptionsPage = () => {
   const [items, setItems] = useState<any[]>([]);
+  const [plans, setPlans] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
-  const [draft, setDraft] = useState<any>({ planName: 'Free', planCode: 'free', planCategory: 'free', status: 'active', amount: 0, autoRenew: false, startDate: '', endDate: '' });
+  const [draft, setDraft] = useState<any>({ planId: '', planName: 'Free', planCode: 'free', planCategory: 'free', status: 'active', amount: 0, autoRenew: false, startDate: '', endDate: '', currency: 'COP', limits: {} });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -496,7 +498,12 @@ const SubscriptionsPage = () => {
     try {
       setLoading(true);
       setError('');
-      setItems(await subscriptionsService.getAll());
+      const [subscriptionItems, planItems] = await Promise.all([
+        subscriptionsService.getAll(),
+        plansService.getAll(),
+      ]);
+      setItems(subscriptionItems);
+      setPlans(planItems);
     } catch (err: any) {
       setError(err?.response?.data?.message || 'No se pudieron cargar suscripciones');
     } finally {
@@ -511,6 +518,7 @@ const SubscriptionsPage = () => {
   const openEditor = (item: any) => {
     setSelected(item);
     setDraft({
+      planId: item.planId || '',
       planName: item.planName || 'Free',
       planCode: item.planCode || 'free',
       planCategory: item.planCategory || 'free',
@@ -519,8 +527,38 @@ const SubscriptionsPage = () => {
       autoRenew: !!item.autoRenew,
       startDate: toDateInputValue(item.startDate),
       endDate: toDateInputValue(item.endDate),
+      currency: item.currency || 'COP',
+      limits: item.limits || {},
     });
     setFormError('');
+  };
+
+  const applyPlanDraft = (planId: string) => {
+    const matchedPlan = plans.find((plan) => (plan.id || plan._id) === planId);
+    if (!matchedPlan) {
+      setDraft((prev: any) => ({
+        ...prev,
+        planId: '',
+        planName: 'Free',
+        planCode: 'free',
+        planCategory: 'free',
+        amount: 0,
+        currency: 'COP',
+        limits: {},
+      }));
+      return;
+    }
+
+    setDraft((prev: any) => ({
+      ...prev,
+      planId: matchedPlan.id || matchedPlan._id,
+      planName: matchedPlan.name,
+      planCode: matchedPlan.code,
+      planCategory: matchedPlan.category,
+      amount: Number(matchedPlan.price || 0),
+      currency: matchedPlan.currency || 'COP',
+      limits: matchedPlan.limits || {},
+    }));
   };
 
   const save = async () => {
@@ -528,7 +566,19 @@ const SubscriptionsPage = () => {
     try {
       setSaving(true);
       setFormError('');
-      await subscriptionsService.update(selected.id, { planName: draft.planName, planCode: draft.planCode, planCategory: draft.planCategory, status: draft.status, amount: Number(draft.amount), autoRenew: draft.autoRenew, startDate: draft.startDate || undefined, endDate: draft.endDate || undefined });
+      await subscriptionsService.update(selected.id, {
+        planId: draft.planId || undefined,
+        planName: draft.planName,
+        planCode: draft.planCode,
+        planCategory: draft.planCategory,
+        status: draft.status,
+        amount: Number(draft.amount),
+        currency: draft.currency || 'COP',
+        autoRenew: draft.autoRenew,
+        limits: draft.limits || {},
+        startDate: draft.startDate || undefined,
+        endDate: draft.endDate || undefined,
+      });
       await load();
       setSelected(null);
     } catch (err: any) {
@@ -554,8 +604,11 @@ const SubscriptionsPage = () => {
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         <Card title="MRR" value={`$${Math.round(mrr)}`} />
         <Card title="Activas" value={items.filter((item) => item.status === 'active').length} />
-        <Card title="Past Due" value={items.filter((item) => item.status === 'past_due').length} />
+        <Card title="Expiradas" value={items.filter((item) => item.status === 'expired').length} />
         <Card title="Total" value={items.length} />
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+        Esta vista edita la suscripcion activa real del usuario en Mongo. Al cambiar el plan desde aqui se actualiza el documento de <strong>subscriptions</strong> y el usuario deberia verlo reflejado al volver a su pantalla de suscripcion.
       </div>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <table className="w-full">
@@ -580,14 +633,21 @@ const SubscriptionsPage = () => {
             {formError ? <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{formError}</div> : null}
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Usuario"><input value={selected.userName} disabled className={inputClassName} /></Field>
-              <Field label="Nombre del plan"><input value={draft.planName} onChange={(e) => setDraft((prev: any) => ({ ...prev, planName: e.target.value }))} className={inputClassName} /></Field>
-              <Field label="Codigo"><input value={draft.planCode} onChange={(e) => setDraft((prev: any) => ({ ...prev, planCode: e.target.value }))} className={inputClassName} /></Field>
-              <Field label="Categoria"><select value={draft.planCategory} onChange={(e) => setDraft((prev: any) => ({ ...prev, planCategory: e.target.value }))} className={inputClassName}><option value="free">free</option><option value="premium">premium</option><option value="extra_tokens">extra_tokens</option><option value="custom">custom</option></select></Field>
+              <Field label="Plan real"><select value={draft.planId} onChange={(e) => applyPlanDraft(e.target.value)} className={inputClassName}><option value="">Selecciona un plan</option>{plans.map((plan) => <option key={plan.id || plan._id} value={plan.id || plan._id}>{plan.name} · {plan.category} · {formatMoney(plan.price, plan.currency)}</option>)}</select></Field>
+              <Field label="Nombre del plan"><input value={draft.planName} disabled className={inputClassName} /></Field>
+              <Field label="Codigo"><input value={draft.planCode} disabled className={inputClassName} /></Field>
+              <Field label="Categoria"><input value={draft.planCategory} disabled className={inputClassName} /></Field>
               <Field label="Estado"><select value={draft.status} onChange={(e) => setDraft((prev: any) => ({ ...prev, status: e.target.value }))} className={inputClassName}><option value="active">active</option><option value="expired">expired</option><option value="canceled">canceled</option><option value="pending_activation">pending_activation</option></select></Field>
               <Field label="Monto"><input type="number" min="0" value={draft.amount} onChange={(e) => setDraft((prev: any) => ({ ...prev, amount: Number(e.target.value) }))} className={inputClassName} /></Field>
               <Field label="Auto renew"><select value={draft.autoRenew ? 'true' : 'false'} onChange={(e) => setDraft((prev: any) => ({ ...prev, autoRenew: e.target.value === 'true' }))} className={inputClassName}><option value="true">Si</option><option value="false">No</option></select></Field>
               <Field label="Inicio"><input type="date" value={draft.startDate} onChange={(e) => setDraft((prev: any) => ({ ...prev, startDate: e.target.value }))} className={inputClassName} /></Field>
               <Field label="Fin"><input type="date" value={draft.endDate} onChange={(e) => setDraft((prev: any) => ({ ...prev, endDate: e.target.value }))} className={inputClassName} /></Field>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+              <p><strong>Plan aplicado:</strong> {draft.planName || 'Sin plan'}</p>
+              <p className="mt-1"><strong>Codigo:</strong> {draft.planCode || '-'}</p>
+              <p className="mt-1"><strong>Categoria:</strong> {draft.planCategory || '-'}</p>
+              <p className="mt-1"><strong>Limites:</strong> mensajes {draft.limits?.maxMessagesPerMonth ?? 0}, chats {draft.limits?.maxChatsPerMonth ?? 0}, tokens {draft.limits?.monthlyTokens ?? 0}, documentos {draft.limits?.maxDocumentsMB ?? 0} MB</p>
             </div>
             <div className="flex gap-3">
               <button onClick={() => setSelected(null)} className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-700">Cancelar</button>
@@ -1655,7 +1715,7 @@ export default function App() {
     { id: 'paymentMethods' as const, label: 'Metodos de pago', icon: <CreditCard className="h-5 w-5" /> },
     { id: 'plans' as const, label: 'Planes', icon: <Plus className="h-5 w-5" /> },
     { id: 'subscriptionRequests' as const, label: 'Solicitudes premium', icon: <MessageSquareShare className="h-5 w-5" /> },
-    { id: 'documents' as const, label: 'Documentos', icon: <FileText className="h-5 w-5" /> },
+    { id: 'documents' as const, label: 'Documentos internos / RAG', icon: <FileText className="h-5 w-5" /> },
     { id: 'alerts' as const, label: 'Alertas', icon: <Bell className="h-5 w-5" /> },
     { id: 'activity' as const, label: 'Actividad', icon: <Activity className="h-5 w-5" /> },
     { id: 'settings' as const, label: 'Configuracion', icon: <Settings className="h-5 w-5" /> },
