@@ -464,6 +464,10 @@ export function SubscriptionRequestsPage() {
                 {requestStatusLabel[selected.status]}. Puedes actualizar el
                 seguimiento o activar el plan cuando el pago ya este validado.
               </p>
+              <p className="mt-2 text-xs text-slate-500">
+                Si guardas el estado como "Plan activado", ahora tambien se
+                actualiza la suscripcion real del usuario.
+              </p>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -479,6 +483,14 @@ export function SubscriptionRequestsPage() {
                 <span className="text-sm font-medium text-slate-700">Plan</span>
                 <input
                   value={`${selected.planName} (${requestTypeLabel[selected.requestType]})`}
+                  disabled
+                  className={inputClassName}
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-slate-700">Plan anterior</span>
+                <input
+                  value={selected.currentPlanName || selected.currentPlanCode || 'Sin dato'}
                   disabled
                   className={inputClassName}
                 />
@@ -659,14 +671,26 @@ export function SubscriptionRequestsPage() {
                 onClick={() => void save()}
                 className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-700 disabled:opacity-60"
               >
-                {saving ? 'Guardando...' : 'Guardar estado'}
+                {saving
+                  ? draftStatus === 'activated'
+                    ? 'Activando...'
+                    : 'Guardando...'
+                  : draftStatus === 'activated'
+                    ? 'Guardar y activar'
+                    : 'Guardar estado'}
               </button>
               <button
-                disabled={activating || selected.status === 'rejected'}
+                disabled={
+                  activating || selected.status === 'rejected' || selected.status === 'activated'
+                }
                 onClick={() => void activate()}
                 className="flex-1 rounded-lg bg-teal-600 px-4 py-2.5 text-sm text-white disabled:opacity-60"
               >
-                {activating ? 'Activando...' : 'Aprobar y activar plan'}
+                {activating
+                  ? 'Activando...'
+                  : selected.status === 'activated'
+                    ? 'Plan ya activado'
+                    : 'Aprobar y activar plan'}
               </button>
             </div>
           </div>
