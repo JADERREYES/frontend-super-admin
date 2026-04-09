@@ -1030,7 +1030,7 @@ const DocumentsPage = () => {
   const [error, setError] = useState('');
   const [formError, setFormError] = useState('');
   const [statusFilter, setStatusFilter] = useState<
-    'all' | 'processed' | 'pending' | 'uploaded_not_extracted'
+    'all' | 'processed' | 'pending' | 'uploaded_not_extracted' | 'failed'
   >('all');
 
   const load = async () => {
@@ -1365,7 +1365,7 @@ const DocumentsPageV2 = () => {
     (acc, item) => {
       const key = item.systemStatus || 'processed';
       if (key in acc) {
-        acc[key as 'processed' | 'pending' | 'uploaded_not_extracted'] += 1;
+        acc[key as 'processed' | 'pending' | 'uploaded_not_extracted' | 'failed'] += 1;
       }
       return acc;
     },
@@ -1373,6 +1373,7 @@ const DocumentsPageV2 = () => {
       processed: 0,
       pending: 0,
       uploaded_not_extracted: 0,
+      failed: 0,
     },
   );
 
@@ -1389,7 +1390,7 @@ const DocumentsPageV2 = () => {
         </div>
       </div>
       {formError ? <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{formError}</div> : null}
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-5">
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
           <p className="text-sm font-medium text-emerald-800">Listos para usar</p>
           <p className="mt-2 text-2xl font-bold text-emerald-900">{statusCounts.processed}</p>
@@ -1402,6 +1403,10 @@ const DocumentsPageV2 = () => {
           <p className="text-sm font-medium text-amber-800">Subidos sin texto</p>
           <p className="mt-2 text-2xl font-bold text-amber-900">{statusCounts.uploaded_not_extracted}</p>
         </div>
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+          <p className="text-sm font-medium text-red-800">Con incidencia</p>
+          <p className="mt-2 text-2xl font-bold text-red-900">{statusCounts.failed}</p>
+        </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-sm font-medium text-slate-700">Filtro por estado</p>
           <select
@@ -1413,10 +1418,23 @@ const DocumentsPageV2 = () => {
             <option value="processed">Listos para usar</option>
             <option value="pending">Procesando</option>
             <option value="uploaded_not_extracted">Subidos sin texto extraido</option>
+            <option value="failed">Con incidencia</option>
           </select>
         </div>
       </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+        Sube PDF o DOCX para alimentar el conocimiento interno del sistema. El
+        estado te mostrara si el archivo ya quedo listo, si sigue procesando o si
+        necesita reintento administrativo.
+      </div>
       <div className="space-y-4">
+        {filteredItems.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+            {items.length === 0
+              ? 'Todavia no hay documentos internos. Usa "Nuevo documento" para subir un PDF o DOCX.'
+              : 'No hay documentos para el filtro actual. Cambia el filtro o actualiza la lista.'}
+          </div>
+        ) : null}
         {filteredItems.map((item) => {
           const statusMeta = getDocumentStatusMeta(item.systemStatus);
           const canRetryExtraction =
