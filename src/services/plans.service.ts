@@ -8,6 +8,7 @@ export type AdminPlanItem = {
   description?: string;
   category:
     | 'free'
+    | 'trial'
     | 'premium'
     | 'extra_tokens'
     | 'custom'
