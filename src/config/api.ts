@@ -1,12 +1,26 @@
-const DEFAULT_API_URL = 'http://localhost:3001';
+const LOCAL_API_URL = 'http://localhost:3001';
+const PRODUCTION_API_URL = 'https://backend-core-taupe.vercel.app';
 
-const env = import.meta as ImportMeta & { env?: Record<string, string | undefined> };
+const resolveDefaultApiUrl = () => {
+  if (typeof window !== 'undefined') {
+    const { hostname } = window.location;
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0'
+    ) {
+      return LOCAL_API_URL;
+    }
+  }
+
+  return PRODUCTION_API_URL;
+};
 
 const normalizeApiUrl = (value?: string) =>
-  (value?.trim() || DEFAULT_API_URL).replace(/\/+$/, '');
+  (value?.trim() || resolveDefaultApiUrl()).replace(/\/+$/, '');
 
 export const apiConfig = {
-  baseURL: normalizeApiUrl(env.env?.VITE_API_URL),
+  baseURL: normalizeApiUrl(import.meta.env.VITE_API_URL),
   storage: {
     tokenKey: 'admin_token',
     profileKey: 'admin_user',
