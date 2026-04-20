@@ -1,4 +1,5 @@
 import api from './api';
+import { apiConfig } from '../config/api';
 
 export type AdminPaymentMethodItem = {
   _id: string;
@@ -19,17 +20,22 @@ export type AdminPaymentMethodItem = {
   displayOrder?: number;
 };
 
+type RawPaymentMethodItem = AdminPaymentMethodItem & {
+  _id?: string;
+  id?: string;
+};
+
 export const paymentMethodsService = {
   getAll: async (): Promise<AdminPaymentMethodItem[]> => {
-    const response = await api.get('/admin/payment-methods');
-    return (Array.isArray(response.data) ? response.data : []).map((item: any) => ({
+    const response = await api.get(apiConfig.endpoints.admin.paymentMethods);
+    return ((Array.isArray(response.data) ? response.data : []) as RawPaymentMethodItem[]).map((item) => ({
       ...item,
-      id: item._id || item.id,
+      id: item._id || item.id || '',
     }));
   },
 
   create: async (payload: Omit<AdminPaymentMethodItem, 'id' | '_id'>) => {
-    const response = await api.post('/admin/payment-methods', payload);
+    const response = await api.post(apiConfig.endpoints.admin.paymentMethods, payload);
     return response.data;
   },
 
@@ -37,19 +43,22 @@ export const paymentMethodsService = {
     id: string,
     payload: Partial<Omit<AdminPaymentMethodItem, 'id' | '_id'>>,
   ) => {
-    const response = await api.put(`/admin/payment-methods/${id}`, payload);
+    const response = await api.put(
+      apiConfig.endpoints.admin.paymentMethod(id),
+      payload,
+    );
     return response.data;
   },
 
   updateStatus: async (id: string, isActive: boolean) => {
-    const response = await api.patch(`/admin/payment-methods/${id}/status`, {
+    const response = await api.patch(apiConfig.endpoints.admin.paymentMethodStatus(id), {
       isActive,
     });
     return response.data;
   },
 
   remove: async (id: string) => {
-    const response = await api.delete(`/admin/payment-methods/${id}`);
+    const response = await api.delete(apiConfig.endpoints.admin.paymentMethod(id));
     return response.data;
   },
 };

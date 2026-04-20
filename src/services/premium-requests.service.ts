@@ -1,4 +1,5 @@
 import api from './api';
+import { apiConfig } from '../config/api';
 
 export type PremiumRequestAdminItem = {
   _id: string;
@@ -39,9 +40,11 @@ export type PremiumRequestAdminItem = {
   proofOriginalName?: string;
   proofMimeType?: string;
   proofSize?: number;
+  hasProof?: boolean;
   receiptUrl?: string;
   receiptFileName?: string;
   status:
+    | 'pending'
     | 'new'
     | 'receipt_uploaded'
     | 'submitted'
@@ -71,7 +74,7 @@ export type PremiumRequestAdminItem = {
 
 export const premiumRequestsService = {
   getAll: async (): Promise<PremiumRequestAdminItem[]> => {
-    const response = await api.get('/admin/subscription-requests');
+    const response = await api.get(apiConfig.endpoints.admin.subscriptionRequests);
     return response.data;
   },
 
@@ -79,23 +82,45 @@ export const premiumRequestsService = {
     id: string,
     status: PremiumRequestAdminItem['status'],
   ) => {
-    const response = await api.patch(`/admin/subscription-requests/${id}/status`, {
-      status,
-    });
+    const response = await api.patch(
+      apiConfig.endpoints.admin.subscriptionRequestStatus(id),
+      { status },
+    );
     return response.data;
   },
 
   updateNotes: async (id: string, adminNotes: string) => {
-    const response = await api.patch(`/admin/subscription-requests/${id}/notes`, {
-      adminNotes,
-    });
+    const response = await api.patch(
+      apiConfig.endpoints.admin.subscriptionRequestNotes(id),
+      { adminNotes },
+    );
     return response.data;
   },
 
   activate: async (id: string, adminNotes?: string) => {
-    const response = await api.post(`/admin/subscription-requests/${id}/activate`, {
-      adminNotes,
-    });
+    const response = await api.post(
+      apiConfig.endpoints.admin.subscriptionRequestActivate(id),
+      { adminNotes },
+    );
     return response.data;
+  },
+
+  downloadProof: async (id: string, fileName?: string) => {
+    const response = await api.get(
+      apiConfig.endpoints.admin.subscriptionRequestProofDownload(id),
+      { responseType: 'blob' },
+    );
+
+    const blob = new Blob([response.data], {
+      type: response.headers['content-type'] || 'application/octet-stream',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = window.document.createElement('a');
+    link.href = url;
+    link.download = fileName || `comprobante-${id}`;
+    window.document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   },
 };

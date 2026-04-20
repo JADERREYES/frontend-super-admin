@@ -1,4 +1,12 @@
 import api from './api';
+import { apiConfig } from '../config/api';
+import type {
+  AdminDocument,
+  ListParams,
+  PaginatedResponse,
+  RagHealth,
+  RagSearchResult,
+} from '../types/admin';
 
 const deriveSystemStatus = (document: any) => {
   const processingStatus = String(document?.processingStatus || '');
@@ -25,7 +33,7 @@ const deriveSystemStatus = (document: any) => {
   return 'processed';
 };
 
-const normalize = (document: any) => ({
+const normalize = (document: any): AdminDocument => ({
   ...document,
   id: document._id || document.id,
   hasFile: !!document.hasFile || !!document.fileUrl || !!document.storagePath,
@@ -47,18 +55,39 @@ const buildFormData = (data: any, file: File) => {
 };
 
 export const documentsService = {
-  getAll: async () => {
-    const response = await api.get('/documents');
-    return (Array.isArray(response.data) ? response.data : []).map(normalize);
+  getAll: async (
+    params: ListParams = {},
+  ): Promise<PaginatedResponse<AdminDocument>> => {
+    const response = await api.get(apiConfig.endpoints.documents.list, {
+      params,
+    });
+    if (Array.isArray(response.data)) {
+      const data = response.data.map(normalize);
+      return {
+        data,
+        meta: {
+          page: 1,
+          limit: data.length,
+          total: data.length,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
+      };
+    }
+    return {
+      ...response.data,
+      data: (response.data?.data || []).map(normalize),
+    };
   },
 
   getOne: async (id: string) => {
-    const response = await api.get(`/documents/${id}`);
+    const response = await api.get(apiConfig.endpoints.documents.item(id));
     return normalize(response.data);
   },
 
   getExtractedText: async (id: string) => {
-    const response = await api.get(`/documents/${id}/extracted-text`);
+    const response = await api.get(apiConfig.endpoints.documents.extractedText(id));
     return {
       ...response.data,
       systemStatus: response.data?.systemStatus || deriveSystemStatus(response.data),
@@ -66,25 +95,29 @@ export const documentsService = {
   },
 
   create: async (data: any) => {
-    const response = await api.post('/documents', data);
+    const response = await api.post(apiConfig.endpoints.documents.create, data);
     return normalize(response.data);
   },
 
   upload: async (data: any, file: File) => {
-    const response = await api.post('/documents/upload', buildFormData(data, file), {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    const response = await api.post(
+      apiConfig.endpoints.documents.upload,
+      buildFormData(data, file),
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      },
+    );
     return normalize(response.data);
   },
 
   update: async (id: string, data: any) => {
-    const response = await api.put(`/documents/${id}`, data);
+    const response = await api.put(apiConfig.endpoints.documents.item(id), data);
     return normalize(response.data);
   },
 
   replaceUpload: async (id: string, data: any, file: File) => {
     const response = await api.put(
-      `/documents/${id}/upload`,
+      apiConfig.endpoints.documents.replaceUpload(id),
       buildFormData(data, file),
       { headers: { 'Content-Type': 'multipart/form-data' } },
     );
@@ -92,22 +125,22 @@ export const documentsService = {
   },
 
   reindex: async (id: string) => {
-    const response = await api.post(`/documents/${id}/reindex`);
+    const response = await api.post(apiConfig.endpoints.documents.reindex(id));
     return response.data;
   },
 
   reprocess: async (id: string) => {
-    const response = await api.post(`/documents/${id}/reprocess`);
+    const response = await api.post(apiConfig.endpoints.documents.reprocess(id));
     return response.data;
   },
 
   delete: async (id: string) => {
-    const response = await api.delete(`/documents/${id}`);
+    const response = await api.delete(apiConfig.endpoints.documents.item(id));
     return response.data;
   },
 
   download: async (id: string, fileName?: string) => {
-    const response = await api.get(`/documents/${id}/download`, {
+    const response = await api.get(apiConfig.endpoints.documents.download(id), {
       responseType: 'blob',
     });
 
@@ -123,5 +156,17 @@ export const documentsService = {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+  },
+
+  searchRag: async (query: string, limit = 5): Promise<RagSearchResult> => {
+    const response = await api.get(apiConfig.endpoints.documents.ragSearch, {
+      params: { query, limit },
+    });
+    return response.data;
+  },
+
+  getRagHealth: async (): Promise<RagHealth> => {
+    const response = await api.get(apiConfig.endpoints.documents.ragHealth);
+    return response.data;
   },
 };

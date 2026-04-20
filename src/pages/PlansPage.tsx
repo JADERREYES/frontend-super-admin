@@ -1,6 +1,32 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pencil, X } from 'lucide-react';
 import { plansService, type AdminPlanItem } from '../services/plans.service';
+import { useAdminFilters } from '../hooks/useAdminFilters';
+
+type PlanDraft = Omit<AdminPlanItem, 'id' | '_id'>;
+type PlanFilters = {
+  search: string;
+  status: 'all' | 'active' | 'inactive';
+};
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'response' in error &&
+    typeof error.response === 'object' &&
+    error.response !== null &&
+    'data' in error.response &&
+    typeof error.response.data === 'object' &&
+    error.response.data !== null &&
+    'message' in error.response.data &&
+    typeof error.response.data.message === 'string'
+  ) {
+    return error.response.data.message;
+  }
+
+  return fallback;
+};
 
 const Badge = ({
   children,
@@ -41,7 +67,7 @@ const formatMoney = (value: number, currency = 'COP') =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value || 0);
 
 export function PlansPage() {
-  const emptyDraft = {
+  const emptyDraft: PlanDraft = {
     name: '',
     code: '',
     description: '',
@@ -57,8 +83,12 @@ export function PlansPage() {
     sortOrder: 0,
   };
   const [items, setItems] = useState<AdminPlanItem[]>([]);
+  const { filters, updateFilter } = useAdminFilters<PlanFilters>({
+    search: '',
+    status: 'all',
+  });
   const [selected, setSelected] = useState<AdminPlanItem | null>(null);
-  const [draft, setDraft] = useState<any>(emptyDraft);
+  const [draft, setDraft] = useState<PlanDraft>(emptyDraft);
   const [editorOpen, setEditorOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -70,8 +100,8 @@ export function PlansPage() {
       setLoading(true);
       setError('');
       setItems(await plansService.getAll());
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'No se pudieron cargar los planes');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'No se pudieron cargar los planes'));
     } finally {
       setLoading(false);
     }
@@ -80,6 +110,24 @@ export function PlansPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  const filteredItems = useMemo(
+    () =>
+      items.filter((item) => {
+        const search = filters.search.trim().toLowerCase();
+        const matchesSearch =
+          !search ||
+          item.name.toLowerCase().includes(search) ||
+          item.code.toLowerCase().includes(search) ||
+          item.category.toLowerCase().includes(search);
+        const matchesStatus =
+          filters.status === 'all' ||
+          (filters.status === 'active' ? item.isActive : !item.isActive);
+
+        return matchesSearch && matchesStatus;
+      }),
+    [filters.search, filters.status, items],
+  );
 
   const openCreate = () => {
     setSelected(null);
@@ -133,8 +181,8 @@ export function PlansPage() {
       }
       await load();
       closeEditor();
-    } catch (err: any) {
-      setFormError(err?.response?.data?.message || 'No se pudo guardar el plan');
+    } catch (err: unknown) {
+      setFormError(getErrorMessage(err, 'No se pudo guardar el plan'));
     } finally {
       setSaving(false);
     }
@@ -152,11 +200,20 @@ export function PlansPage() {
           <button onClick={openCreate} className="rounded-lg bg-teal-600 px-4 py-2 text-sm text-white">Nuevo plan</button>
         </div>
       </div>
+      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-5 md:grid-cols-3">
+        <input value={filters.search} onChange={(event) => updateFilter('search', event.target.value)} placeholder="Buscar por nombre, codigo o categoria" className={inputClassName} />
+        <select value={filters.status} onChange={(event) => updateFilter('status', event.target.value as PlanFilters['status'])} className={inputClassName}>
+          <option value="all">Todos los estados</option>
+          <option value="active">Activos</option>
+          <option value="inactive">Inactivos</option>
+        </select>
+        <div className="rounded-lg bg-slate-50 px-4 py-2.5 text-sm text-slate-600">{filteredItems.length} de {items.length} planes</div>
+      </div>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <table className="w-full">
           <thead className="bg-slate-50 text-left text-xs uppercase text-slate-600"><tr><th className="px-6 py-4">Plan</th><th className="px-6 py-4">Categoria</th><th className="px-6 py-4">Precio</th><th className="px-6 py-4">Duracion</th><th className="px-6 py-4">Estado</th><th className="px-6 py-4 text-right">Acciones</th></tr></thead>
           <tbody className="divide-y divide-slate-100">
-            {items.map((item) => (
+            {filteredItems.map((item) => (
               <tr key={item.id} className="hover:bg-slate-50">
                 <td className="px-6 py-4"><div className="font-medium text-slate-900">{item.name}</div><div className="text-xs text-slate-500">{item.code}</div></td>
                 <td className="px-6 py-4 text-sm text-slate-600">{item.category}</td>
@@ -173,24 +230,24 @@ export function PlansPage() {
         <div className="space-y-4">
           {formError ? <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{formError}</div> : null}
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Nombre</span><input value={draft.name} onChange={(e) => setDraft((prev: any) => ({ ...prev, name: e.target.value }))} className={inputClassName} /></label>
-            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Codigo</span><input value={draft.code} onChange={(e) => setDraft((prev: any) => ({ ...prev, code: e.target.value }))} className={inputClassName} /></label>
-            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Categoria</span><select value={draft.category} onChange={(e) => setDraft((prev: any) => ({ ...prev, category: e.target.value }))} className={inputClassName}><option value="free">free</option><option value="trial">trial</option><option value="premium">premium</option><option value="extra_tokens">extra_tokens</option><option value="custom">custom</option><option value="subscription">subscription</option><option value="tokens">tokens</option></select></label>
-            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Precio</span><input type="number" min="0" value={draft.price} onChange={(e) => setDraft((prev: any) => ({ ...prev, price: Number(e.target.value) }))} className={inputClassName} /></label>
-            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Moneda</span><input value={draft.currency} onChange={(e) => setDraft((prev: any) => ({ ...prev, currency: e.target.value }))} className={inputClassName} /></label>
-            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Duracion (dias)</span><input type="number" min="1" value={draft.durationDays} onChange={(e) => setDraft((prev: any) => ({ ...prev, durationDays: Number(e.target.value) }))} className={inputClassName} /></label>
-            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Estado</span><select value={draft.isActive ? 'active' : 'inactive'} onChange={(e) => setDraft((prev: any) => ({ ...prev, isActive: e.target.value === 'active' }))} className={inputClassName}><option value="active">Activo</option><option value="inactive">Inactivo</option></select></label>
-            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Default</span><select value={draft.isDefault ? 'true' : 'false'} onChange={(e) => setDraft((prev: any) => ({ ...prev, isDefault: e.target.value === 'true' }))} className={inputClassName}><option value="false">No</option><option value="true">Si</option></select></label>
-            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Customizable</span><select value={draft.isCustomizable ? 'true' : 'false'} onChange={(e) => setDraft((prev: any) => ({ ...prev, isCustomizable: e.target.value === 'true' }))} className={inputClassName}><option value="false">No</option><option value="true">Si</option></select></label>
-            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Orden</span><input type="number" min="0" value={draft.displayOrder} onChange={(e) => setDraft((prev: any) => ({ ...prev, displayOrder: Number(e.target.value), sortOrder: Number(e.target.value) }))} className={inputClassName} /></label>
+            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Nombre</span><input value={draft.name} onChange={(e) => setDraft((prev) => ({ ...prev, name: e.target.value }))} className={inputClassName} /></label>
+            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Codigo</span><input value={draft.code} onChange={(e) => setDraft((prev) => ({ ...prev, code: e.target.value }))} className={inputClassName} /></label>
+            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Categoria</span><select value={draft.category} onChange={(e) => setDraft((prev) => ({ ...prev, category: e.target.value as PlanDraft['category'] }))} className={inputClassName}><option value="free">free</option><option value="trial">trial</option><option value="premium">premium</option><option value="extra_tokens">extra_tokens</option><option value="custom">custom</option><option value="subscription">subscription</option><option value="tokens">tokens</option></select></label>
+            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Precio</span><input type="number" min="0" value={draft.price} onChange={(e) => setDraft((prev) => ({ ...prev, price: Number(e.target.value) }))} className={inputClassName} /></label>
+            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Moneda</span><input value={draft.currency} onChange={(e) => setDraft((prev) => ({ ...prev, currency: e.target.value }))} className={inputClassName} /></label>
+            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Duracion (dias)</span><input type="number" min="1" value={draft.durationDays} onChange={(e) => setDraft((prev) => ({ ...prev, durationDays: Number(e.target.value) }))} className={inputClassName} /></label>
+            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Estado</span><select value={draft.isActive ? 'active' : 'inactive'} onChange={(e) => setDraft((prev) => ({ ...prev, isActive: e.target.value === 'active' }))} className={inputClassName}><option value="active">Activo</option><option value="inactive">Inactivo</option></select></label>
+            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Default</span><select value={draft.isDefault ? 'true' : 'false'} onChange={(e) => setDraft((prev) => ({ ...prev, isDefault: e.target.value === 'true' }))} className={inputClassName}><option value="false">No</option><option value="true">Si</option></select></label>
+            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Customizable</span><select value={draft.isCustomizable ? 'true' : 'false'} onChange={(e) => setDraft((prev) => ({ ...prev, isCustomizable: e.target.value === 'true' }))} className={inputClassName}><option value="false">No</option><option value="true">Si</option></select></label>
+            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Orden</span><input type="number" min="0" value={draft.displayOrder} onChange={(e) => setDraft((prev) => ({ ...prev, displayOrder: Number(e.target.value), sortOrder: Number(e.target.value) }))} className={inputClassName} /></label>
           </div>
-          <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Descripcion</span><textarea rows={4} value={draft.description} onChange={(e) => setDraft((prev: any) => ({ ...prev, description: e.target.value }))} className={inputClassName} /></label>
+          <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Descripcion</span><textarea rows={4} value={draft.description} onChange={(e) => setDraft((prev) => ({ ...prev, description: e.target.value }))} className={inputClassName} /></label>
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Max chats/mes</span><input type="number" min="0" value={draft.limits.maxChatsPerMonth} onChange={(e) => setDraft((prev: any) => ({ ...prev, limits: { ...prev.limits, maxChatsPerMonth: Number(e.target.value) } }))} className={inputClassName} /></label>
-            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Max mensajes/mes</span><input type="number" min="0" value={draft.limits.maxMessagesPerMonth} onChange={(e) => setDraft((prev: any) => ({ ...prev, limits: { ...prev.limits, maxMessagesPerMonth: Number(e.target.value) } }))} className={inputClassName} /></label>
-            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Max documentos MB</span><input type="number" min="0" value={draft.limits.maxDocumentsMB} onChange={(e) => setDraft((prev: any) => ({ ...prev, limits: { ...prev.limits, maxDocumentsMB: Number(e.target.value) } }))} className={inputClassName} /></label>
-            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Tokens mensuales</span><input type="number" min="0" value={draft.limits.monthlyTokens} onChange={(e) => setDraft((prev: any) => ({ ...prev, limits: { ...prev.limits, monthlyTokens: Number(e.target.value) } }))} className={inputClassName} /></label>
-            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Extra tokens</span><input type="number" min="0" value={draft.limits.extraTokens} onChange={(e) => setDraft((prev: any) => ({ ...prev, limits: { ...prev.limits, extraTokens: Number(e.target.value) } }))} className={inputClassName} /></label>
+            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Max chats/mes</span><input type="number" min="0" value={draft.limits.maxChatsPerMonth} onChange={(e) => setDraft((prev) => ({ ...prev, limits: { ...prev.limits, maxChatsPerMonth: Number(e.target.value) } }))} className={inputClassName} /></label>
+            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Max mensajes/mes</span><input type="number" min="0" value={draft.limits.maxMessagesPerMonth} onChange={(e) => setDraft((prev) => ({ ...prev, limits: { ...prev.limits, maxMessagesPerMonth: Number(e.target.value) } }))} className={inputClassName} /></label>
+            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Max documentos MB</span><input type="number" min="0" value={draft.limits.maxDocumentsMB} onChange={(e) => setDraft((prev) => ({ ...prev, limits: { ...prev.limits, maxDocumentsMB: Number(e.target.value) } }))} className={inputClassName} /></label>
+            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Tokens mensuales</span><input type="number" min="0" value={draft.limits.monthlyTokens} onChange={(e) => setDraft((prev) => ({ ...prev, limits: { ...prev.limits, monthlyTokens: Number(e.target.value) } }))} className={inputClassName} /></label>
+            <label className="block space-y-2"><span className="text-sm font-medium text-slate-700">Extra tokens</span><input type="number" min="0" value={draft.limits.extraTokens} onChange={(e) => setDraft((prev) => ({ ...prev, limits: { ...prev.limits, extraTokens: Number(e.target.value) } }))} className={inputClassName} /></label>
           </div>
           <div className="flex gap-3">
             <button onClick={closeEditor} className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-700">Cancelar</button>

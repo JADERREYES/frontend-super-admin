@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-  ExternalLink,
   Eye,
   FileText,
   Pencil,
@@ -10,6 +9,7 @@ import {
   premiumRequestsService,
   type PremiumRequestAdminItem,
 } from '../services/premium-requests.service';
+import { useAdminFilters } from '../hooks/useAdminFilters';
 
 const Badge = ({
   children,
@@ -76,6 +76,7 @@ const formatReportedAmount = (value?: number) =>
   value && value > 0 ? formatMoney(value, 'COP') : 'No reportado';
 
 const requestStatusLabel: Record<PremiumRequestAdminItem['status'], string> = {
+  pending: 'Pendiente',
   new: 'Recibida',
   receipt_uploaded: 'Comprobante recibido',
   submitted: 'Enviada',
@@ -93,6 +94,7 @@ const requestStatusTone: Record<
   PremiumRequestAdminItem['status'],
   'info' | 'warning' | 'success' | 'danger'
 > = {
+  pending: 'warning',
   new: 'info',
   receipt_uploaded: 'info',
   submitted: 'info',
@@ -119,14 +121,9 @@ const formatFileSize = (size?: number) => {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const isPreviewableImage = (mimeType?: string, url?: string) =>
-  Boolean(mimeType?.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(url || ''));
-
-const isPdf = (mimeType?: string, url?: string) =>
-  Boolean(mimeType === 'application/pdf' || /\.pdf$/i.test(url || ''));
-
 const isOperationallyPending = (status: PremiumRequestAdminItem['status']) =>
   [
+    'pending',
     'new',
     'receipt_uploaded',
     'submitted',
@@ -137,30 +134,29 @@ const isOperationallyPending = (status: PremiumRequestAdminItem['status']) =>
     'awaiting_validation',
   ].includes(status);
 
+const isTestRequest = (item: PremiumRequestAdminItem) =>
+  item.userEmail?.endsWith('.test') ||
+  item.paidAtReference?.toUpperCase().includes('E2E') ||
+  item.planCode?.toLowerCase().includes('e2e');
+
+type SubscriptionRequestFilters = {
+  status: 'all' | PremiumRequestAdminItem['status'];
+};
+
 export function SubscriptionRequestsPage() {
   const [items, setItems] = useState<PremiumRequestAdminItem[]>([]);
   const [selected, setSelected] = useState<PremiumRequestAdminItem | null>(null);
   const [draftStatus, setDraftStatus] =
-    useState<PremiumRequestAdminItem['status']>('submitted');
+    useState<PremiumRequestAdminItem['status']>('pending');
   const [draftNotes, setDraftNotes] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activating, setActivating] = useState(false);
   const [error, setError] = useState('');
   const [formError, setFormError] = useState('');
-  const [statusFilter, setStatusFilter] = useState<
-    'all' | PremiumRequestAdminItem['status']
-  >('all');
-  const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
-  const resolveAssetUrl = (path?: string) => {
-    if (!path) return '';
-    if (/^https?:\/\//i.test(path)) {
-      return path;
-    }
-    return `${apiBaseUrl}${path}`;
-  };
-
+  const { filters, updateFilter } = useAdminFilters<SubscriptionRequestFilters>({
+    status: 'all',
+  });
   const load = async () => {
     try {
       setLoading(true);
@@ -180,17 +176,20 @@ export function SubscriptionRequestsPage() {
   }, []);
 
   const filteredItems =
-    statusFilter === 'all'
+    filters.status === 'all'
       ? items
-      : items.filter((item) => item.status === statusFilter);
+      : items.filter((item) => item.status === filters.status);
   const hasAnyRequests = items.length > 0;
   const isFilterHidingResults = hasAnyRequests && filteredItems.length === 0;
   const pendingCount = items.filter((item) => isOperationallyPending(item.status)).length;
   const newCount = items.filter(
-    (item) => item.status === 'new' || item.status === 'submitted',
+    (item) =>
+      item.status === 'pending' ||
+      item.status === 'new' ||
+      item.status === 'submitted',
   ).length;
   const manualOnlyCount = items.filter(
-    (item) => !item.proofUrl && !item.receiptUrl,
+    (item) => !item.hasProof,
   ).length;
   const activatedCount = items.filter((item) => item.status === 'activated').length;
 
@@ -203,7 +202,7 @@ export function SubscriptionRequestsPage() {
 
   const closeEditor = () => {
     setSelected(null);
-    setDraftStatus('submitted');
+    setDraftStatus('pending');
     setDraftNotes('');
     setFormError('');
   };
@@ -282,15 +281,17 @@ export function SubscriptionRequestsPage() {
         </div>
         <div className="flex items-center gap-3">
           <select
-            value={statusFilter}
+            value={filters.status}
             onChange={(event) =>
-              setStatusFilter(
+              updateFilter(
+                'status',
                 event.target.value as 'all' | PremiumRequestAdminItem['status'],
               )
             }
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none"
           >
             <option value="all">Todos los estados</option>
+            <option value="pending">Pendientes</option>
             <option value="new">Recibidas</option>
             <option value="receipt_uploaded">Comprobante recibido</option>
             <option value="submitted">Enviadas</option>
@@ -328,7 +329,7 @@ export function SubscriptionRequestsPage() {
           <p className="mt-2 text-2xl font-bold text-sky-950">{newCount}</p>
         </div>
         <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
-          <p className="text-sm font-medium text-violet-800">Solo datos manuales</p>
+          <p className="text-sm font-medium text-violet-800">Sin comprobante</p>
           <p className="mt-2 text-2xl font-bold text-violet-950">{manualOnlyCount}</p>
         </div>
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
@@ -343,7 +344,7 @@ export function SubscriptionRequestsPage() {
             Mostrando <strong>{filteredItems.length}</strong> de{' '}
             <strong>{items.length}</strong> solicitudes. Filtro actual:{' '}
             <strong>
-              {statusFilter === 'all' ? 'Todos los estados' : requestStatusLabel[statusFilter]}
+              {filters.status === 'all' ? 'Todos los estados' : requestStatusLabel[filters.status]}
             </strong>
             .
           </span>
@@ -358,7 +359,7 @@ export function SubscriptionRequestsPage() {
             <tr>
               <th className="px-6 py-4">Usuario</th>
               <th className="px-6 py-4">Plan</th>
-              <th className="px-6 py-4">Pago reportado</th>
+              <th className="px-6 py-4">Valor y telefono</th>
               <th className="px-6 py-4">Comprobante</th>
               <th className="px-6 py-4">Estado</th>
               <th className="px-6 py-4">Fecha</th>
@@ -378,7 +379,10 @@ export function SubscriptionRequestsPage() {
                 }`}
               >
                 <td className="px-6 py-4">
-                  <div className="font-medium text-slate-900">{item.userName}</div>
+                  <div className="flex flex-wrap items-center gap-2 font-medium text-slate-900">
+                    <span>{item.userName}</span>
+                    {isTestRequest(item) ? <Badge tone="info">Test/dev</Badge> : null}
+                  </div>
                   <div className="text-sm text-slate-500">{item.userEmail}</div>
                 </td>
                 <td className="px-6 py-4">
@@ -390,7 +394,7 @@ export function SubscriptionRequestsPage() {
                 </td>
                 <td className="px-6 py-4 text-sm text-slate-600">
                   <div className="font-medium text-slate-700">
-                    {formatReportedAmount(item.reportedAmount)}
+                    {formatMoney(item.planSnapshot.price, item.planSnapshot.currency)}
                   </div>
                   <div className="text-xs text-slate-500">
                     {item.payerName || 'Sin nombre'} · {item.payerPhone || 'Sin telefono'}
@@ -401,18 +405,17 @@ export function SubscriptionRequestsPage() {
                   </div>
                 </td>
                 <td className="px-6 py-4 text-sm text-slate-600">
-                  {item.proofUrl || item.receiptUrl ? (
-                    <a
-                      href={resolveAssetUrl(item.proofUrl || item.receiptUrl)}
-                      target="_blank"
-                      rel="noreferrer"
+                  {item.hasProof ? (
+                    <button
+                      type="button"
+                      onClick={() => void premiumRequestsService.downloadProof(item._id, item.proofOriginalName || item.receiptFileName)}
                       className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white"
                     >
                       <Eye className="h-4 w-4" />
-                      Ver archivo
-                    </a>
+                      Descargar
+                    </button>
                   ) : (
-                    <span className="text-xs text-slate-500">Solo datos manuales</span>
+                    <span className="text-xs text-slate-500">Sin comprobante</span>
                   )}
                 </td>
                 <td className="px-6 py-4">
@@ -536,6 +539,7 @@ export function SubscriptionRequestsPage() {
                   }
                   className={inputClassName}
                 >
+                  <option value="pending">Pendiente</option>
                   <option value="new">Recibida</option>
                   <option value="receipt_uploaded">Comprobante recibido</option>
                   <option value="submitted">Enviada</option>
@@ -580,7 +584,7 @@ export function SubscriptionRequestsPage() {
               />
             </label>
 
-            {selected.proofUrl || selected.receiptUrl ? (
+            {selected.hasProof ? (
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
                 <p className="font-medium text-slate-900">Comprobante</p>
                 <p className="mt-1">
@@ -603,15 +607,14 @@ export function SubscriptionRequestsPage() {
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-3">
-                  <a
-                    href={resolveAssetUrl(selected.proofUrl || selected.receiptUrl)}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => void premiumRequestsService.downloadProof(selected._id, selected.proofOriginalName || selected.receiptFileName)}
                     className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm text-white"
                   >
-                    <ExternalLink className="h-4 w-4" />
-                    Abrir comprobante
-                  </a>
+                    <Eye className="h-4 w-4" />
+                    Descargar comprobante
+                  </button>
                   {selected.proofStorageKey ? (
                     <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs text-slate-500">
                       <FileText className="h-4 w-4" />
@@ -619,26 +622,9 @@ export function SubscriptionRequestsPage() {
                     </span>
                   ) : null}
                 </div>
-                {isPreviewableImage(
-                  selected.proofMimeType,
-                  selected.proofUrl || selected.receiptUrl,
-                ) ? (
-                  <img
-                    src={resolveAssetUrl(selected.proofUrl || selected.receiptUrl)}
-                    alt="Comprobante"
-                    className="mt-4 max-h-[420px] w-full rounded-xl border border-slate-200 object-contain bg-white"
-                  />
-                ) : null}
-                {isPdf(
-                  selected.proofMimeType,
-                  selected.proofUrl || selected.receiptUrl,
-                ) ? (
-                  <iframe
-                    title="Vista previa del comprobante"
-                    src={resolveAssetUrl(selected.proofUrl || selected.receiptUrl)}
-                    className="mt-4 h-[420px] w-full rounded-xl border border-slate-200 bg-white"
-                  />
-                ) : null}
+                <p className="mt-3 text-xs text-slate-500">
+                  Por seguridad, la vista previa publica fue reemplazada por descarga autenticada.
+                </p>
               </div>
             ) : (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">

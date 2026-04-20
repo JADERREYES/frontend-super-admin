@@ -1,4 +1,5 @@
 import api from './api';
+import { apiConfig } from '../config/api';
 
 export type AdminPlanItem = {
   _id: string;
@@ -35,17 +36,22 @@ export type AdminPlanItem = {
   displayOrder?: number;
 };
 
+type RawPlanItem = AdminPlanItem & {
+  _id?: string;
+  id?: string;
+};
+
 export const plansService = {
   getAll: async (): Promise<AdminPlanItem[]> => {
-    const response = await api.get('/admin/plans');
-    return (Array.isArray(response.data) ? response.data : []).map((item: any) => ({
+    const response = await api.get(apiConfig.endpoints.admin.plans);
+    return ((Array.isArray(response.data) ? response.data : []) as RawPlanItem[]).map((item) => ({
       ...item,
-      id: item._id || item.id,
+      id: item._id || item.id || '',
     }));
   },
 
   create: async (payload: Omit<AdminPlanItem, 'id' | '_id'>) => {
-    const response = await api.post('/admin/plans', payload);
+    const response = await api.post(apiConfig.endpoints.admin.plans, payload);
     return response.data;
   },
 
@@ -53,17 +59,19 @@ export const plansService = {
     id: string,
     payload: Partial<Omit<AdminPlanItem, 'id' | '_id'>>,
   ) => {
-    const response = await api.put(`/admin/plans/${id}`, payload);
+    const response = await api.put(apiConfig.endpoints.admin.plan(id), payload);
     return response.data;
   },
 
   updateStatus: async (id: string, isActive: boolean) => {
-    const response = await api.patch(`/admin/plans/${id}/status`, { isActive });
+    const response = await api.patch(apiConfig.endpoints.admin.planStatus(id), {
+      isActive,
+    });
     return response.data;
   },
 
   remove: async (id: string) => {
-    const response = await api.delete(`/admin/plans/${id}`);
+    const response = await api.delete(apiConfig.endpoints.admin.plan(id));
     return response.data;
   },
 };
