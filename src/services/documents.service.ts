@@ -2,6 +2,7 @@ import api from './api';
 import { apiConfig } from '../config/api';
 import type {
   AdminDocument,
+  DocumentChunkPreview,
   ListParams,
   PaginatedResponse,
   RagHealth,
@@ -40,6 +41,18 @@ const normalize = (document: any): AdminDocument => ({
   lastUpdated: document.lastUpdated || document.updatedAt || null,
   systemStatus: document.systemStatus || deriveSystemStatus(document),
 });
+
+const unwrapDocumentResponse = (payload: any): AdminDocument => {
+  if (payload?.document) {
+    return normalize({
+      ...payload.document,
+      ragIndexed: payload?.rag?.indexed,
+      ragChunksCreated: payload?.rag?.chunksCreated,
+    });
+  }
+
+  return normalize(payload);
+};
 
 const buildFormData = (data: any, file: File) => {
   const formData = new FormData();
@@ -94,6 +107,16 @@ export const documentsService = {
     };
   },
 
+  getChunks: async (
+    id: string,
+  ): Promise<{ document: AdminDocument; chunks: DocumentChunkPreview[] }> => {
+    const response = await api.get(apiConfig.endpoints.documents.chunks(id));
+    return {
+      document: normalize(response.data?.document || {}),
+      chunks: Array.isArray(response.data?.chunks) ? response.data.chunks : [],
+    };
+  },
+
   create: async (data: any) => {
     const response = await api.post(apiConfig.endpoints.documents.create, data);
     return normalize(response.data);
@@ -107,7 +130,7 @@ export const documentsService = {
         headers: { 'Content-Type': 'multipart/form-data' },
       },
     );
-    return normalize(response.data);
+    return unwrapDocumentResponse(response.data);
   },
 
   update: async (id: string, data: any) => {
@@ -121,6 +144,13 @@ export const documentsService = {
       buildFormData(data, file),
       { headers: { 'Content-Type': 'multipart/form-data' } },
     );
+    return unwrapDocumentResponse(response.data);
+  },
+
+  setRagStatus: async (id: string, enabled: boolean) => {
+    const response = await api.put(apiConfig.endpoints.documents.ragStatus(id), {
+      enabled,
+    });
     return normalize(response.data);
   },
 
@@ -159,8 +189,9 @@ export const documentsService = {
   },
 
   searchRag: async (query: string, limit = 5): Promise<RagSearchResult> => {
-    const response = await api.get(apiConfig.endpoints.documents.ragSearch, {
-      params: { query, limit },
+    const response = await api.post(apiConfig.endpoints.documents.ragSearch, {
+      query,
+      limit,
     });
     return response.data;
   },

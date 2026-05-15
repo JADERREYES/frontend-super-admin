@@ -111,6 +111,7 @@ export type AdminSubscription = {
 export type AdminDocument = {
   id: string;
   _id?: string;
+  ownerType?: 'admin' | 'user' | 'system';
   title: string;
   category: string;
   status: string;
@@ -124,22 +125,41 @@ export type AdminDocument = {
   processingStatus?: string;
   processingError?: string;
   indexingStatus?: string;
+  indexingError?: string;
+  ragEnabled?: boolean;
+  ragError?: string;
   extractedText?: string;
   extractedTextAvailable?: boolean;
   extractedTextLength?: number;
   chunkCount?: number;
+  lastIndexedAt?: string;
   lastUpdated?: string;
+};
+
+export type DocumentChunkPreview = {
+  id: string;
+  chunkIndex: number;
+  totalChunks: number;
+  text: string;
+  sourceFileName?: string;
+  sourceType?: string;
+  ownerType?: string;
+  isActive?: boolean;
+  metadata?: Record<string, unknown>;
 };
 
 export type RagSearchResult = {
   contextUsed: boolean;
-  retrievalMode: 'none' | 'keyword' | 'semantic';
+  retrievalMode: 'none' | 'keyword' | 'local_semantic' | 'atlas_vector';
   chunks: Array<{
     documentId: string;
     documentTitle: string;
     chunkIndex: number;
+    totalChunks: number;
     text: string;
     score: number;
+    sourceFileName?: string;
+    sourceType?: 'pdf' | 'txt' | 'manual' | 'chat_memory';
   }>;
 };
 
